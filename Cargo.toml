@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 lz4_flex = { version = "0.9.0", default-features = false }
 clap = "2"
+crc = "2"

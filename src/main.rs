@@ -34,7 +34,7 @@ impl Header {
         }
     }
 }
-
+use crc::{Crc, Algorithm, CRC_32_ISCSI};
 fn main(){
     let matches = App::new("loaderlz4gen")
         .arg(Arg::with_name("out")
@@ -56,13 +56,15 @@ fn main(){
 
     let mut data = Vec::new();
     f.read_to_end(&mut data).unwrap();
-    let compressed = lz4_flex::compress_prepend_size(&data);
+    println!("CRC:{:08x}", Crc::<u32>::new(&CRC_32_ISCSI).checksum(&data));
+    let compressed = lz4_flex::block::compress_prepend_size(&data);
 
     let header = Header::new(compressed.len() as u32);
 
     let mut f = fs::OpenOptions::new()
         .write(true)
-        .create_new(true)
+        .truncate(true)
+        .create(true)
         .open(out).unwrap();
 
     f.write(header.tobytes()).unwrap();
