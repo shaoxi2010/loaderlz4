@@ -3,18 +3,22 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path;
 use std::mem;
+use std::mem::size_of;
 use std::slice;
 #[repr(C)]
+#[repr(align(2048))]
 struct Header {
     magic: [u8; 16],
+    compressed: u32,
     len: u32
 }
 
 impl Header {
-    fn new(len :u32) -> Self {
+    fn new() -> Self {
         Self {
             magic: *b"Shaoxi2010Loader",
-            len
+            compressed: 0,
+            len: 0
         }
     }
     fn is_ok(&self) -> bool {
@@ -35,12 +39,17 @@ impl Header {
     }
 }
 use crc::{Crc, Algorithm, CRC_32_ISCSI};
+
 fn main(){
     let matches = App::new("loaderlz4gen")
         .arg(Arg::with_name("out")
             .required(true)
             .value_name("file")
             .short("o"))
+        .arg(Arg::with_name("compressed")
+            .required(false)
+            .value_name("mode")
+            .short("-c"))
         .arg(Arg::with_name("input")
             .required(true))
         .help("auto gen loader compress img")
@@ -48,6 +57,7 @@ fn main(){
 
     let out = matches.value_of("out").unwrap();
     let input = matches.value_of("input").unwrap();
+    let comp = matches.value_of("compressed").unwrap_or("false");
 
     let input = path::PathBuf::from(input);
     let out = path::PathBuf::from(out);
@@ -58,17 +68,21 @@ fn main(){
     f.read_to_end(&mut data).unwrap();
     println!("CRC:{:08x}", Crc::<u32>::new(&CRC_32_ISCSI).checksum(&data));
     let compressed = lz4_flex::block::compress_prepend_size(&data);
-
-    let header = Header::new(compressed.len() as u32);
-
+    let mut header = Header::new();
     let mut f = fs::OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)
         .open(out).unwrap();
 
-    f.write(header.tobytes()).unwrap();
-    f.write(&compressed).unwrap();
-
-
+    if comp == "false" {
+        header.len = data.len() as u32;
+        f.write(header.tobytes()).unwrap();
+        f.write(&data).unwrap();
+    } else {
+        header.compressed = 1;
+        header.len = compressed.len() as u32;
+        f.write(header.tobytes()).unwrap();
+        f.write(&compressed).unwrap();
+    }
 }
