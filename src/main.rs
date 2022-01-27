@@ -1,3 +1,4 @@
+use std::alloc::handle_alloc_error;
 use clap::{App, Arg};
 use std::fs;
 use std::io::{Read, Write};
@@ -10,7 +11,9 @@ use std::slice;
 struct Header {
     magic: [u8; 16],
     compressed: u32,
-    len: u32
+    len: u32,
+    load: u32,
+    size: u32
 }
 
 impl Header {
@@ -18,7 +21,9 @@ impl Header {
         Self {
             magic: *b"Shaoxi2010Loader",
             compressed: 0,
-            len: 0
+            len: 0,
+            load: 0x8000_0000,
+            size: 0
         }
     }
     fn is_ok(&self) -> bool {
@@ -46,10 +51,10 @@ fn main(){
             .required(true)
             .value_name("file")
             .short("o"))
-        .arg(Arg::with_name("compressed")
+        .arg(Arg::with_name("loadaddr")
             .required(false)
-            .value_name("mode")
-            .short("-c"))
+            .value_name("addr")
+            .short("-l"))
         .arg(Arg::with_name("input")
             .required(true))
         .help("auto gen loader compress img")
@@ -57,7 +62,8 @@ fn main(){
 
     let out = matches.value_of("out").unwrap();
     let input = matches.value_of("input").unwrap();
-    let comp = matches.value_of("compressed").unwrap_or("false");
+    let addr = matches.value_of("loadaddr").unwrap_or("0xffffffff");
+    let addr= u32::from_str_radix(addr.trim_start_matches("0x"), 16).unwrap();
 
     let input = path::PathBuf::from(input);
     let out = path::PathBuf::from(out);
@@ -75,13 +81,16 @@ fn main(){
         .create(true)
         .open(out).unwrap();
 
-    if comp == "false" {
+    if addr == 0xffffffff {
         header.len = data.len() as u32;
+        header.size = 0;
         f.write(header.tobytes()).unwrap();
         f.write(&data).unwrap();
     } else {
         header.compressed = 1;
         header.len = compressed.len() as u32;
+        header.load = addr;
+        header.size = data.len() as u32;
         f.write(header.tobytes()).unwrap();
         f.write(&compressed).unwrap();
     }
